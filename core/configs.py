@@ -24,6 +24,9 @@ MAX_IMPORT_SIZE = 10 * 1024 * 1024
 MAX_MEMBER_SIZE = 5 * 1024 * 1024
 EXPORT_ALL_NAME = "Конфиг Playerok Universal.zip"
 EXPORT_FULL_NAME = "Конфиг и данные Playerok Universal.zip"
+EXPORT_COMPLETE_NAME = "Полный экспорт Playerok Universal.zip"
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FULL_EXPORT_DIRS = ("modules", "modules_off", "modules_clients", "bot_data", "bot_settings")
 SUPPORTED_EXTENSIONS = (".json", ".zip", ".rar")
 
 SECRET_PATHS = [
@@ -71,6 +74,16 @@ def _file_by_json_name(json_name: str, with_data: bool = True) -> SettingsFile |
             if os.path.basename(file.path).lower() == json_name.lower()
         ][0]
     except: return None
+
+
+def _file_by_member_name(member_name: str) -> SettingsFile | DataFile | None:
+    # A full export contains module config.json/messages.json too. They must
+    # never be interpreted as the main bot's files by the settings importer.
+    parts = member_name.replace("\\", "/").split("/")
+    module_dirs = {"modules", "modules_off", "modules_clients", "module_settings", "module_data"}
+    if any(part.lower() in module_dirs for part in parts[:-1]):
+        return None
+    return _file_by_json_name(parts[-1])
 
 
 def _get_by_path(data: dict, path: tuple):
@@ -212,6 +225,42 @@ def export_all(user_id: int | str, with_data: bool = False) -> str:
                 file.path,
                 json.dumps(data, ensure_ascii=False, indent=4)
             )
+    return path
+
+
+def _export_directory(archive: zipfile.ZipFile, directory: str) -> bool:
+    source = os.path.join(PROJECT_DIR, directory)
+    is_junction = getattr(os.path, "isjunction", lambda _: False)
+    if not os.path.isdir(source) or os.path.islink(source) or is_junction(source):
+        return False
+
+    def on_error(error):
+        raise error
+
+    for current, directories, files in os.walk(source, followlinks=False, onerror=on_error):
+        directories[:] = sorted(
+            name for name in directories
+            if name != "__pycache__"
+            and not os.path.islink(os.path.join(current, name))
+            and not is_junction(os.path.join(current, name))
+        )
+        # Include directory entries so empty module/data folders survive transfer.
+        archive.write(current, os.path.relpath(current, PROJECT_DIR).replace(os.sep, "/"))
+        for name in sorted(files):
+            path = os.path.join(current, name)
+            if name == ".instance.lock" or name.endswith((".pyc", ".pyo")) or os.path.islink(path):
+                continue
+            archive.write(path, os.path.relpath(path, PROJECT_DIR).replace(os.sep, "/"))
+    return True
+
+
+def export_complete(user_id: int | str) -> str:
+    """Export complete module, settings and data directories for manual transfer."""
+    path = os.path.join(_prepare_dir(_user_dir(user_id, "export")), EXPORT_COMPLETE_NAME)
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        found = [_export_directory(archive, directory) for directory in FULL_EXPORT_DIRS]
+        if not any(found):
+            raise Exception("❌ Не найдены папки модулей, данных или настроек для полного экспорта")
     return path
 
 
@@ -392,7 +441,7 @@ def peek_import(path: str) -> list[str]:
 
     with _open_archive(path) as archive:
         for member_name, _ in _archive_members(archive):
-            file = _file_by_json_name(os.path.basename(member_name))
+            file = _file_by_member_name(member_name)
             if file and file.name not in names:
                 names.append(file.name)
     return names
@@ -458,7 +507,7 @@ def import_file(path: str, keep_secrets: bool = True) -> tuple[list[str], list[t
             skipped.append((json_name, "не .json файл"))
             return
 
-        file = _file_by_json_name(json_name)
+        file = _file_by_member_name(member_name)
         if not file:
             skipped.append((json_name, "не конфиг и не данные бота"))
             return

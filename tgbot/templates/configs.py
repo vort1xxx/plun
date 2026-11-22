@@ -14,6 +14,7 @@ def configs_text():
         <blockquote><b>(?)</b> <b>Основной конфиг</b> — только config.json.
         <b>Все конфиги</b> — архив со всеми настройками из папки bot_settings.
         <b>Конфиги + дата</b> — то же самое плюс данные бота из папки bot_data (кэш заказов, сохранённые предметы, список инициализированных пользователей).
+        <b>Полный экспорт</b> — папки modules, bot_data и bot_settings целиком, включая код, настройки и данные модулей, отчёты и резервные копии. При наличии также добавляются modules_off и modules_clients. Для переноса распакуйте архив в папку остановленного бота на другом сервере. Кэш Python и файл блокировки запуска пропускаются.
         <b>Создать бэкап</b> — сохраняет копию текущих конфигов и данных в папку {BACKUPS_DIR} на этом же устройстве. Бот делает это и сам перед каждым импортом, храня последние {MAX_BACKUPS} копий.</blockquote>
 
         ❗ <b>Не передавайте конфиги третьим лицам</b> — в них лежат ваши Cookie-данные, токен Telegram бота и ключ-пароль
@@ -26,6 +27,7 @@ def configs_kb():
         [InlineKeyboardButton(text="📄 Основной конфиг", callback_data="export_main_config")],
         [InlineKeyboardButton(text="📦 Все конфиги", callback_data="export_all_configs")],
         [InlineKeyboardButton(text="🗃 Конфиги + дата", callback_data="export_full_configs")],
+        [InlineKeyboardButton(text="🗄 Полный экспорт", callback_data="export_complete_configs")],
         [InlineKeyboardButton(text="📥 Импортировать", callback_data="send_config_file")],
         [InlineKeyboardButton(text="💾 Создать бэкап", callback_data="make_config_backup")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data=calls.MenuNavigation(to="default").pack())]

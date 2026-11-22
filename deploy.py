@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent
 PROTECTED = {
     ".git", ".deploy", ".ssh", ".codex", ".agents", ".aws", ".venv", "venv",
     "bot_settings", "bot_data", "module_settings", "module_data", "logs",
-    "__pycache__", "artifacts", "modules_off", "modules_clients",
+    "__pycache__", "artifacts", "temp", "modules_off", "modules_clients",
 }
 
 

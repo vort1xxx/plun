@@ -104,7 +104,7 @@ sudo bash install.sh
 ```bash
 sudo bash install.sh --service-only --no-start
 sudo apt-get install -y git
-sudo pluniversal update-setup --repo https://github.com/OWNER/REPO.git --branch main
+sudo pluniversal update-setup --repo https://github.com/vort1xxx/plun.git --branch main
 sudo pluniversal update
 ```
 

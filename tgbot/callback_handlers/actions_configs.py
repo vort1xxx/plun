@@ -1,4 +1,5 @@
 import os
+import asyncio
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, FSInputFile, Message
 from aiogram.fsm.context import FSMContext
@@ -8,7 +9,9 @@ from core.configs import (
     BACKUPS_DIR,
     BACKUP_COOLDOWN,
     MAX_BACKUPS,
+    EXPORT_COMPLETE_NAME,
     export_all,
+    export_complete,
     export_file,
     import_file,
     make_backup,
@@ -25,6 +28,7 @@ from ..helpful import throw_float_message, notify, answer_callback
 
 
 router = Router()
+_export_locks = {}
 
 
 async def apply_import(state: FSMContext, message: Message, user_id: int, keep_secrets: bool, callback: CallbackQuery = None):
@@ -96,9 +100,15 @@ async def apply_import(state: FSMContext, message: Message, user_id: int, keep_s
 
 
 async def send_export(callback: CallbackQuery, state: FSMContext, path: str):
+    caption = "❗ В файле лежат ваши <b>Cookie-данные, токен Telegram бота и ключ-пароль</b> — не пересылайте его третьим лицам"
+    if os.path.basename(path) == EXPORT_COMPLETE_NAME:
+        caption += (
+            "\n\n📦 Полный экспорт модулей, настроек и данных. "
+            "Для переноса остановите бота на целевом сервере и распакуйте архив в его папку."
+        )
     await callback.message.answer_document(
         document=FSInputFile(path),
-        caption="❗ В файле лежат ваши <b>Cookie-данные, токен Telegram бота и ключ-пароль</b> — не пересылайте его третьим лицам",
+        caption=caption,
         parse_mode="HTML",
         reply_markup=templ.destroy_kb()
     )
@@ -113,20 +123,26 @@ async def send_export(callback: CallbackQuery, state: FSMContext, path: str):
 
 
 async def run_export(callback: CallbackQuery, state: FSMContext, make_path: callable):
-    await state.set_state(None)
     user_id = callback.from_user.id
+    lock = _export_locks.setdefault(user_id, asyncio.Lock())
+    if lock.locked():
+        await notify(callback, "⏳ Экспорт уже выполняется, дождитесь файла")
+        return
 
-    try:
-        await send_export(callback, state, make_path(user_id))
-    except Exception as e:
-        await throw_float_message(
-            state=state,
-            message=callback.message,
-            text=templ.configs_float_text(e),
-            reply_markup=templ.back_kb(calls.MenuNavigation(to="configs").pack())
-        )
-    finally:
-        clear_export_dir(user_id)
+    async with lock:
+        await state.set_state(None)
+        try:
+            path = await asyncio.to_thread(make_path, user_id)
+            await send_export(callback, state, path)
+        except Exception as e:
+            await throw_float_message(
+                state=state,
+                message=callback.message,
+                text=templ.configs_float_text(e),
+                reply_markup=templ.back_kb(calls.MenuNavigation(to="configs").pack())
+            )
+        finally:
+            clear_export_dir(user_id)
 
 
 @router.callback_query(F.data == "export_main_config")
@@ -142,6 +158,11 @@ async def callback_export_all_configs(callback: CallbackQuery, state: FSMContext
 @router.callback_query(F.data == "export_full_configs")
 async def callback_export_full_configs(callback: CallbackQuery, state: FSMContext):
     await run_export(callback, state, lambda uid: export_all(uid, with_data=True))
+
+
+@router.callback_query(F.data == "export_complete_configs")
+async def callback_export_complete_configs(callback: CallbackQuery, state: FSMContext):
+    await run_export(callback, state, export_complete)
 
 
 @router.callback_query(F.data == "make_config_backup")

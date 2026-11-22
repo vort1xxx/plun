@@ -17,7 +17,7 @@
 
 3. В GitHub откройте Code -> HTTPS и скопируйте адрес. Подставьте его:
 
-   sudo pluniversal update-setup --repo https://github.com/OWNER/REPO.git --branch main
+   sudo pluniversal update-setup --repo https://github.com/vort1xxx/plun.git --branch main
    sudo pluniversal update
 
    Для чтения публичного репозитория ключи и токены не нужны.

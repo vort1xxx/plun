@@ -182,7 +182,8 @@ class ArchiveTests(unittest.TestCase):
         source = {name: "# source\n" for name in ["bot.py", "deploy.py", "install.sh", "requirements.txt"]}
         source.update({name: "private" for name in ["bot_settings/config.json", "bot_data/orders.json",
                       "modules/a/module_settings/config.json", "modules/a/module_data/orders.json",
-                      ".deploy/config.json", "venv/package", ".env", "logs/latest.log", "artifacts/update.zip"]})
+                      ".deploy/config.json", "venv/package", ".env", "logs/latest.log", "artifacts/update.zip",
+                      "temp/configs/42/export/full.zip"]})
         archive, stage = self.archive(source)
         self.assertEqual(set(deploy.unpack(archive, stage)), {"bot.py", "deploy.py", "install.sh", "requirements.txt"})
         self.assertFalse((stage / "bot_settings").exists())

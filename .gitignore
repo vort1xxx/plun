@@ -20,6 +20,7 @@ __pycache__/
 *.py[cod]
 *.log
 artifacts/
+temp/
 modules_off/
 modules_clients/
 .codex/
