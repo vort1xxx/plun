@@ -1,0 +1,6 @@
+NAME = "bumpgroups"
+PREFIX = "[BumpGroups]"
+VERSION = "1.3.0"
+DESCRIPTION = "Автоподнятие по группам: время и частота проверок, порог позиции. /bumpgroups"
+AUTHORS = ""
+LINKS = ""

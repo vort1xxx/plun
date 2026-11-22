@@ -1,0 +1,6 @@
+NAME = "twofa"
+PREFIX = "[2FA]"
+VERSION = "1.0.0"
+DESCRIPTION = "Выдача TOTP-кодов покупателям привязанных товаров. /twofa в Telegram"
+AUTHORS = ""
+LINKS = ""

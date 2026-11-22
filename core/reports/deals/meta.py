@@ -1,0 +1,2 @@
+NAME = 'dealsreport'
+PREFIX = "[Reports]"

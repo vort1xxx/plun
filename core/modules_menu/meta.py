@@ -1,0 +1,6 @@
+NAME = "modulesmenu"
+PREFIX = "[ModulesMenu]"
+VERSION = "1.0.0"
+DESCRIPTION = "Кнопка «Модули» в главном меню с переходом в настройки установленных модулей. /modulesmenu"
+AUTHORS = ""
+LINKS = ""

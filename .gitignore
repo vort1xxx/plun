@@ -1,0 +1,28 @@
+# Local credentials and runtime data
+bot_settings/
+bot_data/
+**/module_settings/
+**/module_data/
+logs/
+**/logs/
+.env
+.env.*
+*.pem
+*.key
+.ssh/
+.aws/
+.deploy/
+
+# Local installations and generated files
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.log
+artifacts/
+modules_off/
+modules_clients/
+.codex/
+.agents/
+.idea/
+.vscode/

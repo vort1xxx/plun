@@ -1,0 +1,87 @@
+ОБНОВЛЕНИЕ PLAYEROK ИЗ GITHUB
+
+Публичный репозиторий
+
+1. Создайте репозиторий на GitHub: Visibility = Public, Add README = Off,
+   Add .gitignore = None, License = None. Исходники должны лежать в корне
+   репозитория, включая bot.py, deploy.py, install.sh и requirements.txt.
+   Используйте приложенный .gitignore при работе через Git. Загрузка через
+   сайт GitHub не применяет .gitignore: не загружайте bot_settings, bot_data,
+   module_settings, module_data, логи, venv, .deploy и секретные файлы.
+   Архив artifacts/playerok-github-source.zip уже исключает эти пути.
+
+2. Один раз перенесите исходники на сервер. Из папки бота выполните:
+
+   sudo bash install.sh --service-only --no-start
+   sudo apt-get install -y git
+
+3. В GitHub откройте Code -> HTTPS и скопируйте адрес. Подставьте его:
+
+   sudo pluniversal update-setup --repo https://github.com/OWNER/REPO.git --branch main
+   sudo pluniversal update
+
+   Для чтения публичного репозитория ключи и токены не нужны.
+   Если ваша ветка называется иначе, замените main её названием.
+
+4. Теперь отправляйте обновлённый код в выбранную ветку. Сервер проверяет
+   GitHub каждые 5 минут через systemd timer. Пока бот остановлен вручную,
+   автоматическое обновление пропускается. Ручная команда update обновляет
+   код и сохраняет остановленное состояние бота.
+
+Настройки, данные бота и модулей, логи, venv, .deploy и секреты сохраняются.
+Локальные файлы, не установленные обновляющим скриптом, не удаляются.
+Удаляются только управляемые файлы, впоследствии удалённые из репозитория.
+Python-файлы проверяются на синтаксис до остановки бота. При изменении
+requirements.txt зависимости готовятся в копии venv до остановки сервиса.
+
+Перед заменой кода создаётся резервная копия в .deploy/backups/.
+После старта сервис должен сохранять один работающий процесс 30 секунд.
+Это проверка процесса, а не подключения к Telegram/Playerok.
+При ошибке возвращаются предыдущие код и venv; данные не откатываются.
+Прерванная установка восстанавливается при следующем запуске обновления.
+Неудачная версия автоматически не повторяется до следующего commit.
+Ручная команда update позволяет повторить её установку.
+Резервные копии автоматически не удаляются.
+
+Управление:
+
+   sudo pluniversal update-status
+   sudo journalctl -u playerokuniversal-update.service -n 100 --no-pager
+   sudo pluniversal update-disable
+
+Интервал задаётся через OnUnitInactiveSec=5min в файле
+/etc/systemd/system/playerokuniversal-update.timer. После изменения:
+
+   sudo systemctl daemon-reload
+   sudo systemctl restart playerokuniversal-update.timer
+
+Приватный репозиторий (дополнительный вариант)
+
+На сервере один раз создайте ключ:
+
+   sudo apt-get install -y openssh-client
+   sudo install -d -m 700 /root/.ssh
+   sudo ssh-keygen -t ed25519 -f /root/.ssh/playerok_deploy -N '' -C playerok-deploy
+   sudo cat /root/.ssh/playerok_deploy.pub
+
+Добавьте публичный ключ в Settings -> Deploy keys -> Add deploy key
+своего репозитория. Allow write access оставьте выключенным.
+Не перезаписывайте ранее созданный ключ при повторной настройке.
+Проверьте доступ от root:
+
+   sudo ssh -i /root/.ssh/playerok_deploy -o IdentitiesOnly=yes -T git@github.com
+
+При первом подключении проверьте отпечаток хоста по документации GitHub,
+после чего подтвердите добавление. Сообщение об успешной авторизации
+и отсутствии shell-доступа означает, что ключ работает (SSH может вернуть 1).
+Затем используйте SSH-адрес из Code -> SSH:
+
+   sudo pluniversal update-setup --repo git@github.com:OWNER/REPO.git --branch main
+   sudo pluniversal update
+
+Для другого ключа добавьте --key /абсолютный/путь/к/ключу.
+Адрес, ветка и путь к ключу хранятся локально в .deploy/config.json.
+
+Документация GitHub:
+https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys
+https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
