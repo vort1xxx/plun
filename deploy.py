@@ -314,6 +314,19 @@ def update(root, automatic=False):
             print(f"Обновление установлено: {commit[:12]}. Резервная копия: {transaction['backup']}", flush=True)
 
 
+def setup_repository(root, repo, branch, key=None, enable=True):
+    config = validate_source(repo, branch, key)
+    with deployment_lock(root / ".deploy"):
+        write_json(root / ".deploy/config.json", config)
+        write_units(Path("/etc/systemd/system"))
+    run("systemctl", "daemon-reload")
+    if enable:
+        run("systemctl", "enable", "--now", TIMER)
+        print("Автообновление включено: проверка каждые 5 минут. Первая проверка: sudo pluniversal update")
+    else:
+        print("Репозиторий настроен. Для включения проверок: sudo systemctl enable --now " + TIMER)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -321,6 +334,7 @@ def main():
     setup.add_argument("--repo", required=True)
     setup.add_argument("--branch", default="main")
     setup.add_argument("--key", default=None)
+    setup.add_argument("--no-enable", action="store_true", help="Prepare configuration and timer without enabling it yet")
     updater = commands.add_parser("update")
     updater.add_argument("--automatic", action="store_true")
     commands.add_parser("status")
@@ -335,13 +349,7 @@ def main():
         if os.name != "posix" or os.geteuid() != 0:
             raise ValueError("Обновление предназначено для Linux/systemd. Запустите команду через sudo.")
         if args.command == "setup":
-            config = validate_source(args.repo, args.branch, args.key)
-            with deployment_lock(ROOT / ".deploy"):
-                write_json(ROOT / ".deploy/config.json", config)
-                write_units(Path("/etc/systemd/system"))
-            run("systemctl", "daemon-reload")
-            run("systemctl", "enable", "--now", TIMER)
-            print("Автообновление включено: проверка каждые 5 минут. Первая проверка: sudo pluniversal update")
+            setup_repository(ROOT, args.repo, args.branch, args.key, enable=not args.no_enable)
         else:
             update(ROOT, args.automatic)
         return 0

@@ -1,7 +1,3 @@
-# Playerok Universal
-[![python](https://img.shields.io/badge/python-3.12.x-yellow?style=for-the-badge&logo=python&link=https%3A%2F%2Fimg.shields.io%2Fbadge%2Ftelegram-%25D0%25BA%25D0%25B0%25D0%25BD%25D0%25B0%25D0%25BB-blue%3Fstyle%3Dfor-the-badge%26logo%3Dtelegram)](https://www.python.org/downloads/release/python-3119/)
-
-Многофункциональный бот-помощник для Playerok 🤖🟦
 
 ---
 
@@ -70,7 +66,7 @@
 1. Выполните команду
 
 ```bash
-sudo bash install.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/vort1xxx/plun/main/bootstrap.sh)
 ```
 2. Следуйте инструкциям установщика. Он автоматически установит все необходимые для работы компоненты.
 
@@ -90,30 +86,12 @@ sudo bash install.sh
 | `pluniversal enable`  | **☑️ Включить авто-запуск бота**  |
 | `pluniversal disable` | **❌ Выключить авто-запуск бота** |
 
-## Обновление из GitHub-репозитория
+## Обновление из приватного GitHub-репозитория
 
 После настройки сервер проверяет выбранную ветку каждые 5 минут. Новые commits
 устанавливаются автоматически. Остановленного вручную бота проверка не запускает.
 Нужен Linux с systemd; в корне репозитория должны находиться файлы этого проекта,
 включая `deploy.py`, `install.sh`, `bot.py` и `requirements.txt`.
-
-Для **публичного репозитория** SSH-ключ и токен не нужны. Загрузите исходники
-в корень репозитория, а на сервере один раз перенесите текущий код в папку бота
-и выполните из этой папки:
-
-```bash
-sudo bash install.sh --service-only --no-start
-sudo apt-get install -y git
-sudo pluniversal update-setup --repo https://github.com/vort1xxx/plun.git --branch main
-sudo pluniversal update
-```
-
-Подставьте HTTPS-адрес из **Code → HTTPS** и название своей ветки.
-Теперь достаточно отправлять обновлённый код в эту ветку на GitHub.
-Настройки и данные бота, настройки и данные модулей, логи и секреты не заменяются.
-Полная инструкция, команды управления и описание отката — в [DEPLOYMENT.txt](DEPLOYMENT.txt).
-
-Далее приведена дополнительная настройка для **приватного репозитория через SSH**.
 
 1. Создайте на GitHub репозиторий с видимостью **Private** и загрузите исходники.
    Используйте Git с приложенным `.gitignore`: он исключает настройки с токенами,

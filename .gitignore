@@ -3,6 +3,7 @@ bot_settings/
 bot_data/
 **/module_settings/
 **/module_data/
+*/module/
 logs/
 **/logs/
 .env

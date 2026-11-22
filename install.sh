@@ -158,14 +158,14 @@ case "${1:-}" in
     systemctl stop "$SERVICE"
     cd -- "$BOT_DIR"
     export TERM=xterm-256color
-    "$PYTHON" - <<'PY'
+    "$PYTHON" -c '
 import colorama.ansitowin32 as ansi
 ansi.AnsiToWin32.convert_osc = lambda self, text: text
 import colorama
 colorama.init()
 from utils import configure_config
 configure_config()
-PY
+'
     if is_configured; then
       systemctl start "$SERVICE"
       printf 'Настройка завершена. Логи: pluniversal log\n'

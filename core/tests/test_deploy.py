@@ -228,6 +228,15 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(environment["GIT_TERMINAL_PROMPT"], "0")
         self.assertNotIn("-i /root/.ssh/playerok_deploy", environment.get("GIT_SSH_COMMAND", ""))
 
+    def test_setup_can_prepare_timer_without_starting_it(self):
+        config = dict(repo="https://github.com/owner/repo.git", branch="main", key=None)
+        with patch.object(deploy, "validate_source", return_value=config), \
+             patch.object(deploy, "deployment_lock", return_value=nullcontext()), \
+             patch.object(deploy, "write_units"), patch.object(deploy, "run") as command:
+            deploy.setup_repository(self.root, config["repo"], config["branch"], enable=False)
+        command.assert_called_once_with("systemctl", "daemon-reload")
+        self.assertEqual(deploy.read_json(self.root / ".deploy/config.json"), config)
+
     def test_non_github_addresses_are_rejected(self):
         for repo in ["https://user:token@github.com/owner/repo.git", "https://example.org/repo", "--upload-pack=evil"]:
             with self.subTest(repo=repo), self.assertRaises(ValueError):
