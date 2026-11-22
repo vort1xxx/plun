@@ -139,9 +139,10 @@ def position_requires_bump(position, threshold):
 
 
 def item_position(item):
-    # priorityPosition is available on both MyItem and ItemProfile.
-    # sequence may be absent in the response returned by get_item.
-    for field in ("priority_position", "sequence"):
+    # sequence is the item's actual position in the seller's item listing.
+    # priorityPosition describes its separate priority placement and can stay
+    # at 10 even when the item itself is much further down the listing.
+    for field in ("sequence", "priority_position"):
         position = getattr(item, field, None)
         if type(position) is int and position > 0:
             return position, field
