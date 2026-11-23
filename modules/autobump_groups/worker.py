@@ -5,7 +5,7 @@ from threading import Event, Lock, Thread
 from playerokapi.enums import ItemStatuses, PriorityTypes
 from settings import Settings as MainSettings
 
-from .logic import active_window, next_check, money, position_requires_bump
+from .logic import active_window, next_check, item_position, money, position_requires_bump
 from .meta import NAME
 from .storage import LOCK, get_config, get_state, save_state
 
@@ -14,64 +14,6 @@ ACTIVE = Event()
 _thread = None
 _thread_lock = Lock()
 _tick_lock = Lock()
-_POSITION_CACHE_TTL = 120
-_position_cache_key = None
-_position_cache_until = 0.0
-_position_cache = {}
-
-
-def seller_listing_positions(account):
-    """Return actual 1-based positions from the account's paginated item list."""
-    global _position_cache_key, _position_cache_until, _position_cache
-    item_ids = frozenset(
-        str(row["id"])
-        for group in get_config()["groups"]
-        for row in group["items"]
-    )
-    cache_key = (str(getattr(account, "id", "")), tuple(sorted(item_ids)))
-    now = time.monotonic()
-    if cache_key == _position_cache_key and now < _position_cache_until:
-        return _position_cache
-
-    positions = {}
-    after_cursor = None
-    seen_cursors = set()
-    offset = 0
-    while item_ids - positions.keys():
-        page = account.get_my_items(count=24, after_cursor=after_cursor)
-        rows = getattr(page, "items", None) or []
-        for listed_item in rows:
-            offset += 1
-            listed_id = str(getattr(listed_item, "id", ""))
-            if listed_id in item_ids:
-                positions[listed_id] = offset
-
-        page_info = getattr(page, "page_info", None)
-        next_cursor = getattr(page_info, "end_cursor", None)
-        if (not page_info or not getattr(page_info, "has_next_page", False)
-                or not next_cursor or next_cursor == after_cursor or next_cursor in seen_cursors):
-            break
-        seen_cursors.add(next_cursor)
-        after_cursor = next_cursor
-
-    _position_cache_key = cache_key
-    _position_cache_until = now + _POSITION_CACHE_TTL
-    _position_cache = positions
-    return positions
-
-
-def current_item_position(account, item_id, item):
-    positions = seller_listing_positions(account)
-    position = positions.get(str(item_id))
-    if type(position) is int and position > 0:
-        return position, "seller_listing"
-    # The detailed item response may include sequence even if it is absent from
-    # the paginated list. priority_position is deliberately excluded: it is a
-    # separate paid-priority rank and can remain 10 while listing rank is 145.
-    position = getattr(item, "sequence", None)
-    if type(position) is int and position > 0:
-        return position, "sequence"
-    return None, None
 
 
 def builtin_enabled():
@@ -151,7 +93,7 @@ def process_item(account, group, row, now=None, manual=False):
     if not manual and getattr(item, "priority", PriorityTypes.DEFAULT) == PriorityTypes.DEFAULT:
         record(item_id, result="default_priority")
         return
-    position, source = current_item_position(account, item_id, item)
+    position, source = item_position(item)
     record(item_id, position=position, position_source=source)
     needed = position_requires_bump(position, group["position"])
     if not manual and needed is not True:

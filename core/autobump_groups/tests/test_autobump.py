@@ -125,25 +125,52 @@ class ScheduleTests(unittest.TestCase):
         self.account.increase_item_priority_status.assert_called_once()
 
     def test_unknown_or_invalid_position_is_skipped(self):
+        self.account.get_item.return_value.priority_position = 10
         for offset, position in enumerate((None, 0, -1, "8", True)):
             self.account.get_item.return_value.sequence = position
             self.tick(f"18:0{offset}:00")
         self.account.increase_item_priority_status.assert_not_called()
 
-    def test_api_priority_position_when_sequence_missing(self):
+    def test_missing_sequence_does_not_use_priority_or_listing_position(self):
         item = self.account.get_item.return_value
         item.sequence = None
-        item.priority_position = 8
+        item.priority_position = 10
+        self.account.get_my_items.return_value = SimpleNamespace(items=[item], page_info=None)
         self.tick()
-        self.account.increase_item_priority_status.assert_called_once()
-        self.assertEqual(storage.get_state()['items']['item']['position_source'], 'priority_position')
-
-    def test_priority_position_takes_precedence_over_sequence(self):
-        self.account.get_item.return_value.priority_position = 5
-        self.account.get_item.return_value.sequence = 80
-        self.tick()
+        info = storage.get_state()['items']['item']
+        self.assertEqual(info['result'], 'unknown_position')
+        self.assertIsNone(info['position'])
+        self.account.get_my_items.assert_not_called()
+        self.account.get_item_priority_statuses.assert_not_called()
         self.account.increase_item_priority_status.assert_not_called()
+
+    def test_sequence_145_used_when_priority_position_is_10(self):
+        self.group['position'] = 100
+        storage.save_config(self.config)
+        item = self.account.get_item.return_value
+        item.priority_position = 10
+        item.sequence = 145
+        self.account.get_my_items.return_value = SimpleNamespace(items=[item], page_info=None)
+        self.tick()
+        self.account.get_item.assert_called_once_with(id='item')
+        self.account.get_my_items.assert_not_called()
+        self.account.increase_item_priority_status.assert_called_once_with('item', 'premium')
+        info = storage.get_state()['items']['item']
+        self.assertEqual(info['position'], 145)
+        self.assertEqual(info['position_source'], 'sequence')
+
+    def test_sequence_is_fetched_again_on_next_scheduled_check(self):
+        item = self.account.get_item.return_value
+        item.sequence, item.priority_position = 145, 10
+        self.tick()
+        self.assertEqual(storage.get_state()['items']['item']['position'], 145)
+        self.account.increase_item_priority_status.reset_mock()
+        item.sequence = 5
+        self.tick('18:01:00')
+        self.assertEqual(self.account.get_item.call_count, 2)
         self.assertEqual(storage.get_state()['items']['item']['position'], 5)
+        self.assertEqual(storage.get_state()['items']['item']['result'], 'position_ok')
+        self.account.increase_item_priority_status.assert_not_called()
 
     def test_remote_check_error_shown_in_state(self):
         self.account.get_item.side_effect = ConnectionError()
@@ -408,6 +435,17 @@ class ScheduleTests(unittest.TestCase):
                 self.assertLessEqual(len(button.callback_data.encode()), 64)
                 self.assertFalse(any(key in button.callback_data for key in ('max_price', 'included', 'excluded', 'notify', 'mode', 'cooldown')))
             self.account.increase_item_priority_status.assert_not_called()
+
+            callback = SimpleNamespace(
+                data=f"bg:items:{self.group['id']}:0", from_user=SimpleNamespace(id='admin'),
+                answer=AsyncMock(), message=SimpleNamespace(answer=AsyncMock()))
+            for source, position, expected in (
+                ('priority_position', 10, '—'), ('seller_listing', 1, '—'),
+                ('sequence', 145, '145'),
+            ):
+                worker.record('item', position=position, position_source=source)
+                asyncio.run(menu.items(callback))
+                self.assertIn(f'позиция: {expected}\n', callback.message.answer.call_args.args[0])
 
 
     def test_manual_raise_ignores_pause_window_position_and_deadline(self):

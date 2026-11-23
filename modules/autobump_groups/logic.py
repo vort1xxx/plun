@@ -139,13 +139,11 @@ def position_requires_bump(position, threshold):
 
 
 def item_position(item):
-    # sequence is the item's actual position in the seller's item listing.
-    # priorityPosition describes its separate priority placement and can stay
-    # at 10 even when the item itself is much further down the listing.
-    for field in ("sequence", "priority_position"):
-        position = getattr(item, field, None)
-        if type(position) is int and position > 0:
-            return position, field
+    # Match PlayerokBot.check_items_positions: read sequence from get_item.
+    # priority_position and the item's index in get_my_items are not substitutes.
+    position = getattr(item, "sequence", None)
+    if type(position) is int and position > 0:
+        return position, "sequence"
     return None, ""
 
 

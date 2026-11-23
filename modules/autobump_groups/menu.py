@@ -383,11 +383,13 @@ async def items(callback: types.CallbackQuery):
     lines, rows = ["📦 <b>Товары группы</b>"], []
     for index, row in enumerate(display_items[page * 5:page * 5 + 5], page * 5 + 1):
         info = state.get(row["id"], {})
+        # Older versions saved priority_position or an index in the seller list.
+        position = info.get("position") if info.get("position_source") == "sequence" else None
         result = RESULTS.get(info.get("result"), "ещё не проверялся")
         if info.get('result') == 'check_error':
             result += f" ({info.get('error', 'неизвестная ошибка')})"
         when = datetime.fromtimestamp(next_check(max(time.time(), info.get("next_at", 0)), group), LOCAL_TZ).strftime("%d.%m %H:%M:%S") if group['enabled'] and get_config()['enabled'] else "группа / модуль на паузе"
-        lines.append(f"\n{index}. <b>{escape(row['name'][:100])}</b>\n{escape(result)}; позиция: {info.get('position') or '—'}\nСледующая проверка: {when} (Калининград)")
+        lines.append(f"\n{index}. <b>{escape(row['name'][:100])}</b>\n{escape(result)}; позиция: {position or '—'}\nСледующая проверка: {when} (Калининград)")
         rows.append(b(f"🗑 Убрать товар {index}", f"remove:{gid}:{item_token(row)}"))
         if info.get("uncertain"):
             rows.append(b(f"⚠️ Проверил списание: товар {index}", f"reset:{gid}:{item_token(row)}"))
