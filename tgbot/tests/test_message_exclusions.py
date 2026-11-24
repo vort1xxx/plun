@@ -11,7 +11,14 @@ import unittest
 from unittest.mock import AsyncMock, Mock
 from urllib.parse import quote
 
+from playerokapi.enums import ItemDealStatuses
+from playerokapi.listener.events import (
+    ItemSentEvent, DealStatusChangedEvent, NewMessageEvent, NewDealEvent, ItemPaidEvent,
+    DealConfirmedEvent, DealRolledBackEvent, DealHasProblemEvent, DealProblemResolvedEvent,
+)
+from playerokapi.parser import item_deal
 from settings import ITEM_MESSAGE_NAMES, MESSAGES, restore_config
+from threading import RLock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -132,6 +139,133 @@ class ExclusionTests(unittest.TestCase):
         await self.ns["callback_delete_message_excluded"](
             NS(message=message), NS(message_id="new_deal", index=1, page=0), state)
         self.assertEqual(self.ns["msg"](self.bot, "new_deal", item=NS(id="b")), "Hello")
+
+
+class TransferMessageTests(unittest.TestCase):
+    def setUp(self):
+        self.messages = {'deal_sent': dict(enabled=True, text=['Передача {item.name}: {deal.id}'], excluded=[])}
+        self.ns = dict(DATA=[], sett=NS(get=lambda *args: self.messages), msg_account=lambda _: None,
+                       MsgItem=NS, MsgDeal=NS, ItemDealStatuses=ItemDealStatuses,
+                       msg_user=lambda user: user, msg_user_from_chat=lambda chat: NS(username='Buyer'),
+                       msg_chat=lambda chat: chat)
+        extract('utils.py', {'normalize_binding', 'binding_items', 'binding_phrases',
+                            'item_matches_binding', 'item_matches_any_binding'}, self.ns)
+        extract('plbot/msg_types.py', {'msg_item', 'msg_deal'}, self.ns)
+        extract('plbot/playerokbot.py', {'msg', '_format_msg_text', 'send_message', '_on_item_sent'},
+                self.ns, class_name='PlayerokBot')
+        self.bot = NS(account=NS(id='seller', profile=None, send_message=Mock()),
+                      config={'playerok': {'read_chat': False}})
+        self.bot._format_msg_text = lambda text, **kwargs: self.ns['_format_msg_text'](self.bot, text, **kwargs)
+        self.bot.msg = lambda name, **kwargs: self.ns['msg'](self.bot, name, **kwargs)
+        self.bot.send_message = lambda *args, **kwargs: self.ns['send_message'](self.bot, *args, **kwargs)
+        self.deal = item_deal(dict(id='deal-1', status='SENT', direction='OUT',
+                                  user=dict(id='buyer', username='Buyer'),
+                                  item=dict(__typename='MyItemProfile', id='item-1', slug='product-1',
+                                            name='Product', price=100, rawPrice=100)))
+        self.chat = NS(id='chat-1')
+
+    def handle(self):
+        # This handler has no asynchronous I/O; use its real body without opening sockets.
+        coroutine = self.ns['_on_item_sent'](self.bot, ItemSentEvent(self.deal, self.chat))
+        try:
+            coroutine.send(None)
+        except StopIteration:
+            return
+        finally:
+            coroutine.close()
+        self.fail('Transfer handler unexpectedly awaited external I/O')
+
+    def test_transfer_message_accepts_partial_item_from_event(self):
+        self.handle()
+        self.bot.account.send_message.assert_called_once_with(
+            chat_id='chat-1', text='Передача Product: deal-1', images=[], mark_chat_as_read=False)
+
+    def test_full_item_still_preserves_message_fields(self):
+        self.deal.item = item_deal(dict(item=dict(
+            __typename='MyItem', id='item-1', slug='product-1', name='Product',
+            description='Details', price=100, rawPrice=100,
+            game=dict(name='Game'), category=dict(name='Category')))).item
+        self.messages['deal_sent']['text'] = ['{item.description}: {item.game} / {item.category}']
+        self.handle()
+        self.assertEqual(self.bot.account.send_message.call_args.kwargs['text'], 'Details: Game / Category')
+
+    def test_unrelated_exclusion_does_not_suppress_transfer_message(self):
+        self.messages['deal_sent']['excluded'] = [{'items': [dict(id='other', slug='other', name='Product')]}]
+        self.handle()
+        self.bot.account.send_message.assert_called_once()
+
+    def test_excluded_partial_item_does_not_send(self):
+        self.messages['deal_sent']['excluded'] = [{'items': [dict(id='item-1')]}]
+        self.handle()
+        self.bot.account.send_message.assert_not_called()
+
+    def test_disabled_transfer_message_does_not_send(self):
+        self.messages['deal_sent']['enabled'] = False
+        self.handle()
+        self.bot.account.send_message.assert_not_called()
+
+    def test_transfer_for_purchase_does_not_message_seller(self):
+        self.deal.user.id = self.bot.account.id
+        self.handle()
+        self.bot.account.send_message.assert_not_called()
+
+
+class TransferEventTests(unittest.TestCase):
+    def setUp(self):
+        self.ns = dict(ItemSentEvent=ItemSentEvent, DealStatusChangedEvent=DealStatusChangedEvent,
+                       NewMessageEvent=NewMessageEvent,
+                       NewDealEvent=NewDealEvent, ItemPaidEvent=ItemPaidEvent,
+                       DealConfirmedEvent=DealConfirmedEvent, DealRolledBackEvent=DealRolledBackEvent,
+                       DealHasProblemEvent=DealHasProblemEvent, DealProblemResolvedEvent=DealProblemResolvedEvent,
+                       logger=Mock())
+        extract('playerokapi/listener/listener.py', {'_parse_message_events', '_get_message_deal'},
+                self.ns, class_name='EventListener')
+        self.deal = NS(id='deal-1')
+        self.chat = NS(id='chat-1')
+        self.message = NS(id='message-1', text='{{ITEM_SENT}}', deal=self.deal)
+        self.listener = NS(_get_actual_message=Mock(return_value=NS(id='message-1', deal=None)),
+                           _get_actual_deal=Mock(return_value=self.deal), _state_lock=RLock(),
+                           review_check_deals=[], processed_deals=[])
+        self.listener._get_message_deal = lambda *args: self.ns['_get_message_deal'](self.listener, *args)
+
+    def test_refresh_without_deal_keeps_original_transfer_event(self):
+        events = self.ns['_parse_message_events'](self.listener, self.message, self.chat)
+        self.assertEqual([type(event) for event in events], [ItemSentEvent, DealStatusChangedEvent])
+        self.assertIs(events[0].deal, self.deal)
+        self.listener._get_actual_deal.assert_called_once_with('deal-1')
+
+    def test_failed_deal_refresh_keeps_deal_from_refreshed_message(self):
+        self.message.deal = None
+        self.listener._get_actual_message.return_value.deal = self.deal
+        self.listener._get_actual_deal.return_value = None
+        events = self.ns['_parse_message_events'](self.listener, self.message, self.chat)
+        self.assertIs(events[0].deal, self.deal)
+
+    def test_missing_deal_in_both_messages_is_logged_and_skipped(self):
+        self.message.deal = None
+        events = self.ns['_parse_message_events'](self.listener, self.message, self.chat)
+        self.assertEqual(events, [])
+        self.listener._get_actual_deal.assert_not_called()
+        self.ns['logger'].warning.assert_called_once()
+
+    def test_other_deal_events_keep_their_event_types(self):
+        for text, expected in (
+            ('{{ITEM_PAID}}', [NewDealEvent, ItemPaidEvent]),
+            ('{{DEAL_CONFIRMED}}', [DealConfirmedEvent, DealStatusChangedEvent]),
+            ('{{DEAL_CONFIRMED_AUTOMATICALLY}}', [DealConfirmedEvent, DealStatusChangedEvent]),
+            ('{{DEAL_ROLLED_BACK}}', [DealRolledBackEvent, DealStatusChangedEvent]),
+            ('{{DEAL_HAS_PROBLEM}}', [DealHasProblemEvent, DealStatusChangedEvent]),
+            ('{{DEAL_PROBLEM_RESOLVED}}', [DealProblemResolvedEvent, DealStatusChangedEvent]),
+        ):
+            with self.subTest(message=text):
+                self.message.text = text
+                events = self.ns['_parse_message_events'](self.listener, self.message, self.chat)
+                self.assertEqual([type(event) for event in events], expected)
+
+    def test_paid_event_still_deduplicates_deals(self):
+        self.message.text = '{{ITEM_PAID}}'
+        self.ns['_parse_message_events'](self.listener, self.message, self.chat)
+        self.assertEqual(self.ns['_parse_message_events'](self.listener, self.message, self.chat), [])
 
 
 if __name__ == "__main__":

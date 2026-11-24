@@ -12,6 +12,8 @@ from playerokapi.types import (
     AccountProfile, 
     UserProfile, 
     Item, 
+    MyItem,
+    ItemProfile,
     ItemDeal, 
     ChatMessage,
     Chat
@@ -140,7 +142,7 @@ class MsgItem:
     category: str
 
 
-def msg_item(data: Item) -> MsgItem:
+def msg_item(data: Item | MyItem | ItemProfile) -> MsgItem:
     if not data:
         return None
 
@@ -148,11 +150,11 @@ def msg_item(data: Item) -> MsgItem:
         id=data.id or "-",
         slug=data.slug or "-",
         name=data.name or "-",
-        description=data.description or "-",
+        description=getattr(data, "description", None) or "-",
         price=data.price or "-",
         raw_price=data.raw_price or "-",
-        game=data.game.name if data.game and data.game.name else "-",
-        category=data.category.name if data.category and data.category.name else "-"
+        game=getattr(getattr(data, "game", None), "name", None) or "-",
+        category=getattr(getattr(data, "category", None), "name", None) or "-"
     )
 
 
